@@ -23,7 +23,7 @@ type Reader struct {
 // NewReader returns a quoted-printable reader, decoding from r.
 func NewReader(r io.Reader) *Reader {
 	return &Reader{
-		br: bufio.NewReader(r),
+		br: bufio.NewReaderSize(r, 1024*1024), // 1. 增大缓存区
 	}
 }
 
@@ -84,7 +84,22 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 			if r.rerr != nil {
 				return n, r.rerr
 			}
-			r.line, r.rerr = r.br.ReadSlice('\n')
+
+			// r.line, r.rerr = r.br.ReadSlice('\n')
+			var isPrefix bool
+			for i := 0; ; i++ {
+				var line []byte
+				line, isPrefix, r.rerr = r.br.ReadLine() // 2. 优化按行读取内容
+				if i == 0 {
+					r.line = line
+				} else {
+					r.line = append(r.line, line...)
+				}
+				if !isPrefix {
+					break
+				}
+			}
+			r.line = append(r.line, '\n') // 3. 固定写死 \n 换行
 
 			// Does the line end in CRLF instead of just LF?
 			hasLF := bytes.HasSuffix(r.line, lf)
